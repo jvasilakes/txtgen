@@ -8,41 +8,49 @@ import re
 import numpy
 import sys
 
+import dill
+import pickle
+
 from collections import defaultdict, OrderedDict
 from nltk.tokenize import PunktWordTokenizer
 
 
-# Set number of grams here.
-NGRAMS = 3
+def train(n, data_file, outfile):
+    """
+    Train the n-gram model from the training data in <data_file>
+    and write the resulting model to <outfile>.
+    """
 
-
-def main():
-
-    if NGRAMS <= 1:
-        print "Sorry, NGRAMS must be >= 2."
+    if n <= 1:
+        print "n must be >= 2."
         return
 
-    # If we've already built some models before,
-    # rename the file to keep them separate.
-    if os.path.isfile(str(NGRAMS) + 'gram_model.txt'):
-        os.rename(str(NGRAMS) + 'gram_model.txt', str(NGRAMS) + 'gram_model.old')
+    if not outfile:
+        print "no outfile specified"
+        return
 
     # Make sure training as test files are named correctly!
-    training_data_en = 'scifi.txt'
+    training_data = data_file
 
     # Train the ngram models
-    print "Building English model."
-    en_model = build_model(training_data_en, model_name='en_model')
+    print "Building model."
+    model = build_model(n, training_data)
 
-    gen_random_output(en_model, n=140)
+    print "Saving model to {0}" .format(outfile)
+    pickle.dump(model, open(outfile, 'wb'))
 
-# ------- BUILD MODEL -------------------------------------
-def build_model(training_data_file, model_name=None):
-    '''
-    # Builds a ngram probability model for
-    # for training_data_file and returns that
-    # model as a dictionary.
-    '''
+
+def generate(model_file, num_words=30):
+    model = pickle.load(open(model_file))
+    gen_random_output(model, num_words) 
+
+
+def build_model(n, training_data_file, model_name=None):
+    """
+    Builds a ngram probability model for
+    for training_data_file and returns that
+    model as a dictionary.
+    """
 
     # Read in the file.
     print "Counting"
@@ -52,7 +60,7 @@ def build_model(training_data_file, model_name=None):
     processed_data_str = preprocess_line(data_file_str)
 
     # Count ngrams.
-    ngram_counts = count_word_ngrams(NGRAMS, processed_data_str)
+    ngram_counts = count_word_ngrams(n, processed_data_str)
 
     # Discount using Good-Turing discounting.
     print "Discounting"
@@ -67,33 +75,30 @@ def build_model(training_data_file, model_name=None):
 
 
 def read_file(text_file):
-    '''
-    # Opens and reads text_file. Returns
-    # file contents as a string.
-    '''
-
+    """
+    Opens and reads text_file. Returns
+    file contents as a string.
+    """
     with open(text_file, 'r') as f:
         file_string = f.read()
-
     return file_string
 
 
 def preprocess_line(file_string):
-    '''
-    # Reads in file string returned by read_file()
-    # and removes all characters that are not
-    # whitespace, [a-z][A-Z], comma, or period.
-    # Changes all characters to lowercase and
-    # converts numerals to 0. Replace whitespace
-    # with an underscore for ease of viewing.
-    '''
-
+    """
+    Reads in file string returned by read_file()
+    and removes all characters that are not
+    whitespace, [a-z][A-Z], comma, or period.
+    Changes all characters to lowercase and
+    converts numerals to 0. Replace whitespace
+    with an underscore for ease of viewing.
+    """
     # Convert to lowercase.
     processed_string = file_string.lower()
 
     # Delete any characters that are not a digit,
     # whitespace, a-z, comma, or period.
-#    processed_string = re.sub(r'[^\d\sa-z,.]', r'', processed_string)
+    #processed_string = re.sub(r'[^\d\sa-z,.]', r'', processed_string)
 
     # Convert all digits to 0.
     processed_string = re.sub(r'\d', r'0', processed_string)
@@ -105,16 +110,13 @@ def preprocess_line(file_string):
 
 
 def count_word_ngrams(n, processed_string):
-    '''
-    # Counts all word ngrams in processed_string
-    # and creates a dictionary of those ngram counts
-    # called ngram_counts_dict.
-    '''
+    """
+    Counts all word ngrams in processed_string
+    and creates a dictionary of those ngram counts
+    called ngram_counts_dict.
+    """
     pwt = PunktWordTokenizer()
     processed_string = pwt.tokenize(processed_string)
-
-    # This empty dictionary will be filled with
-    # the ngrams in processed_string and their frequencies
     ngram_counts_dict = defaultdict(int)
 
     i = 0
@@ -129,14 +131,14 @@ def count_word_ngrams(n, processed_string):
 
 
 def gt_discount(n_counts):
-    '''
-    # Good-Turing discounter.
-    # Calculates Good-Turing probability of
-    # zero-count ngrams, and disocunts
-    # all counts in n_counts accordingly.
-    # Recasts n_counts as a defaultdict with
-    # zero_count_probs as the default value.
-    '''
+    """
+    Good-Turing discounter.
+    Calculates Good-Turing probability of
+    zero-count ngrams, and disocunts
+    all counts in n_counts accordingly.
+    Recasts n_counts as a defaultdict with
+    zero_count_probs as the default value.
+    """
 
     # Calculate the probability for ngrams with zero count.
     # Equation: P_gt_0 = N_1 / N_total
@@ -174,11 +176,11 @@ def gt_discount(n_counts):
 
 
 def estimate_probs(ngram_counts_dict):
-    '''
-    # Estimates probabilities of ngrams using
-    # ngram_counts_dict and returns a new dictionary
-    # with the probabilities.
-    '''
+    """
+    Estimates probabilities of ngrams using
+    ngram_counts_dict and returns a new dictionary
+    with the probabilities.
+    """
     ngram_probs_dict = ngram_counts_dict.copy()
 
     num_ops = len(ngram_counts_dict.items())
@@ -192,18 +194,14 @@ def estimate_probs(ngram_counts_dict):
 
 
 def calc_perplexity(test_counts_dict, ngram_probs_dict):
-    '''
-    # Calculates perplexity of contents of file_string
-    # according to probabilities in ngram_probs_dict.
-    '''
-
+    """
+    Calculates perplexity of contents of file_string
+    according to probabilities in ngram_probs_dict.
+    """
     test_probs = []
-
     for ngram, count in test_counts_dict.items():
-
         # If the ngram doesn't appear in our model, just skip it.
         for n in range(count):
-
             # Since ngram_probs_dict is a defaultdict as created
             # in gt_discount, it will return the zero count probability
             # if ngram not in ngram_probs_dict.
@@ -211,31 +209,29 @@ def calc_perplexity(test_counts_dict, ngram_probs_dict):
             test_probs.append(logprob)
 
     logprob = sum(test_probs)
-
     norm = logprob / len(test_probs)
-
     perplexity = numpy.power(2, -norm)
-
     return perplexity
 
 
-def gen_random_output(ngram_probs_dict, n=300):
-    '''
-    # Generate n characters of output randomly selected
-    # from the keys of ngram_probs_dict.
-    # OrderedDict is used to ensure that each key is
-    # paired with its associated value.
-    '''
+def gen_random_output(ngram_probs_dict, num_words):
+    """
+    Generate n characters of output randomly selected
+    from the keys of ngram_probs_dict.
+    OrderedDict is used to ensure that each key is
+    paired with its associated value.
+    """
 
     # Choose a trigram to start with
     string = numpy.random.choice(ngram_probs_dict.keys())
+    string = string.split()
 
     # Find all trigrams and their probabilities that start 
     # with the last two characters of random_string.
-    for i in range(n):
+    for i in range(num_words):
         od = OrderedDict()
         for key,value in ngram_probs_dict.iteritems():
-            if key.split()[:2] == string.split()[-2:]:
+            if key.split()[:2] == string[-2:]:
                 od[key] = value
 
         # Choose one of those trigrams according to the probability
@@ -247,10 +243,10 @@ def gen_random_output(ngram_probs_dict, n=300):
 
         # Get the last character of that trigram and append it
         # to random_string.
-        string = ' '.join([string, next_tri.split()[-1]])
+        string.append(next_tri.split()[-1])
+        sys.stdout.write(' ' + next_tri.split()[-1])
+    sys.stdout.write('\n')
     
-    return string
-
 
 if __name__ == '__main__':
-    main()
+    generate('models/scifi.model')
